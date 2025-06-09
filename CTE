@@ -1,0 +1,380 @@
+# Your line manager has told you they’d like to improve the movie search filters on the Rockbuster app and website. After thinking about the best way to do this, you decide to add more film categories so users can browse more genres they’re interested in.
+
+## find out what film genres already exist in the category table
+SELECT *
+FROM category;
+
+## add some new genres: These constraints let us just focus in the name column, because other columns will be added automatically. category_id is set to the next numbers in the table. Last_update is set to the actual date time as integer.
+INSERT INTO category (name)
+VALUES ('Thriller'), ('Crime'), ('Mystery'), ('Romance'), ('War');
+
+## The genre for the movie African Egg needs to be updated to thriller
+UPDATE film_category 
+SET category_ID = (
+	SELECT category_id
+	FROM category
+	WHERE name = 'Thriller'
+)
+WHERE film_id  = (
+	SELECT film_id
+	FROM film
+	WHERE title = 'African Egg'
+);
+
+
+## Since there aren’t many movies in the mystery category, we decide to remove it from the category table.
+DELETE FROM category 
+WHERE name  = 'Mystery';
+
+# Optimizing queries, sorting and grouping data, and reflecting on the database migration process
+SELECT film_id, title
+FROM film;
+
+# The inventory team has asked for more information about this list: count of the movies, average rental rate, and maximum and minimum rental durations.
+SELECT rating, AVG(rental_rate), MIN(rental_duration), MAX (rental_duration)
+FROM film
+GROUP BY rating;
+
+# Film title contains the word Uptown in any position
+"SELECT film_id, title, description
+FROM film
+WHERE title LIKE ('%Uptown%');"
+
+# Film length is more than 120 minutes and rental rate is more than 2.99
+SELECT film_id, title, description
+FROM film
+WHERE length > 120 AND rental_rate>2.99
+GROUP BY film_id , rental_rate;
+
+# Rental duration is between 3 and 7 days (where 3 and 7 aren’t inclusive)
+SELECT film_id, title, description
+FROM film
+WHERE rental_duration BETWEEN 4 AND 6;
+
+# Film replacement cost is less than 14.99
+SELECT film_id, title, description
+FROM film
+WHERE replacement_cost < 14.99;
+
+# Film rating is either PG or G
+SELECT film_id, title, description
+FROM film
+WHERE rating IN ('PG', 'G');
+
+# The inventory team has asked for more information about this list: count of the movies, average rental rate, and maximum and minimum rental durations.
+SELECT film_id, title, description, COUNT(film_id) AS count_movies, AVG(rental_rate) AS average_movie_rental_rate, MAX(rental_duration) AS maximum_rental_duration, MIN(rental_duration) AS minimum_rental_duration 
+FROM film
+WHERE rating IN ('PG', 'G')
+GROUP BY film_id, rental_rate, rental_duration;
+
+# The customer team wants to see the fields you calculated in the last step grouped by rating.
+SELECT film_id, title, description, COUNT(film_id) AS count_movies, AVG(rental_rate) AS average_movie_rental_rate, MAX(rental_duration) AS maximum_rental_duration, MIN(rental_duration) AS minimum_rental_duration, rating 
+FROM film
+WHERE rating IN ('PG', 'G')
+GROUP BY film_id, rental_rate, rental_duration, rating;
+
+# Check Duplicate in film table
+SELECT title,
+       release_year,
+       language_id,
+       rental_duration,
+       COUNT(*)
+FROM film
+GROUP BY title, release_year, language_id, rental_duration
+HAVING COUNT(*) > 1;
+
+# Check duplicate in customer table
+SELECT first_name,
+       last_name,
+       email,
+       COUNT(*)
+FROM customer
+GROUP BY first_name, last_name, email
+HAVING COUNT(*) > 1;
+
+# Check non-uniform in film
+SELECT DISTINCT rating
+FROM film;
+"PG-13"
+"NC-17"
+"G"
+"PG"
+"R"
+
+# Missing values in film
+SELECT COUNT(*) AS total_rows,
+      	 COUNT(title) AS filled_title,
+  COUNT(release_year) AS filled_release_year,
+  	COUNT(language_id) AS filled_language_id,
+  COUNT(rating) AS filled_rating,
+ 	 COUNT(rental_rate) AS filled_rental_rate
+FROM film;
+
+# Missing values in customer
+SELECT
+ 	 COUNT(*) AS total_rows,
+ 	 COUNT(first_name) AS filled_first_name,
+  	COUNT(last_name) AS filled_last_name,
+  COUNT(email) AS filled_email,
+ 	 COUNT(address_id) AS filled_address,
+  COUNT(active) AS filled_active_status
+FROM customer;
+
+# Summarize the data
+## Film
+SELECT MIN(rental_rate) AS min_rent,
+       MAX(rental_rate) AS max_rent,
+       AVG(rental_rate) AS avg_rent,
+       COUNT(rental_rate) AS count_rent_values,
+       COUNT(*) AS total_rows
+FROM film;
+
+SELECT MODE() WITHIN GROUP (ORDER BY rating) AS mode_rating
+FROM film;
+"PG-13"
+
+## Date
+SELECT MIN(create_date), MAX(create_date)
+FROM customer
+WHERE create_date IS NOT NULL;
+
+## Customer
+SELECT MODE() WITHIN GROUP (ORDER BY first_name) AS first_name_mode
+FROM customer;
+
+# Rockbuster’s management team would like to know the top 10 countries where Rockbuster customers are based so they can focus on building a better brand image in those markets. 
+## find the top 10 countries for Rockbuster in terms of customer numbers (We need the sum of customers from each countries so I start with the customer table using COUNT function, then join the address table, from there I join the city table and from city I join the country table. We need the biggest customer counts so I had to order them DESC, and limit to 10. I used inner join because we didn’t need more information than the 2 columns mentioned in select. )
+SELECT co.country,
+       COUNT(c.customer_id) AS customer_count
+FROM customer c
+INNER JOIN address a ON c.address_id = a.address_id
+INNER JOIN city ci ON a.city_id = ci.city_id
+INNER JOIN country co ON ci.country_id = co.country_id
+GROUP BY co.country
+ORDER BY customer_count DESC
+LIMIT 10;
+
+##  identify the top 10 cities that fall within the top 10 countries identified in the last step
+SELECT co.country, ci.city,
+       COUNT(c.customer_id) AS customer_count
+FROM customer c
+INNER JOIN address a ON c.address_id = a.address_id
+INNER JOIN city ci ON a.city_id = ci.city_id
+INNER JOIN country co ON ci.country_id = co.country_id
+WHERE co.country IN  ( SELECT co.country
+						FROM customer c
+						INNER JOIN address a ON c.address_id = a.address_id
+						INNER JOIN city ci ON a.city_id = ci.city_id
+						INNER JOIN country co ON ci.country_id = co.country_id
+						GROUP BY co.country
+						ORDER BY COUNT(c.customer_id) DESC
+						)
+GROUP BY co.country,ci.city
+ORDER BY customer_count DESC
+LIMIT 10;
+
+## find the top 5 customers from the top 10 cities who’ve paid the highest total amounts to Rockbuster. The customer team would like to reward them for their loyalty!
+SELECT  c.customer_id, 
+		c.first_name,
+		c.last_name, 
+		co.country, 
+		ci.city, 
+		SUM(p.amount) AS total_amount_paid
+FROM customer c
+INNER JOIN payment p ON c.customer_id = p.customer_id
+INNER JOIN address a ON c.address_id = a.address_id
+INNER JOIN city ci ON a.city_id = ci.city_id
+INNER JOIN country co ON ci.country_id = co.country_id
+WHERE ci.city IN (SELECT  ci.city
+					FROM customer c
+					INNER JOIN address a ON c.address_id = a.address_id
+					INNER JOIN city ci ON a.city_id = ci.city_id
+					INNER JOIN country co ON ci.country_id = co.country_id
+					WHERE co.country IN (SELECT  co.country
+										FROM customer c
+									 	INNER JOIN address a ON c.address_id = a.address_id
+									    INNER JOIN city ci ON a.city_id = ci.city_id
+									    INNER JOIN country co ON ci.country_id = co.country_id
+										GROUP BY co.country
+										ORDER BY COUNT(c.customer_id) DESC
+										LIMIT (10)
+										)
+					GROUP BY ci.city
+					ORDER BY COUNT(c.customer_id) DESC
+					LIMIT (10)
+					)
+GROUP BY c.customer_id, c.first_name, c.last_name, co.country, ci.city
+ORDER BY total_amount_paid DESC
+LIMIT (5);
+
+# Analysing the result
+## Find the average amount paid by the top 5 customers
+SELECT AVG(total_amount) AS average
+FROM (
+  SELECT  c.customer_id,  
+          c.first_name,
+          c.last_name, 
+          co.country, 
+          ci.city, 
+          SUM(p.amount) AS total_amount
+  FROM customer c
+  INNER JOIN payment p ON c.customer_id = p.customer_id
+  INNER JOIN address a ON c.address_id = a.address_id
+  INNER JOIN city ci ON a.city_id = ci.city_id
+  INNER JOIN country co ON ci.country_id = co.country_id
+  WHERE ci.city IN (
+    SELECT  ci.city
+    FROM customer c
+    INNER JOIN address a ON c.address_id = a.address_id
+    INNER JOIN city ci ON a.city_id = ci.city_id
+    INNER JOIN country co ON ci.country_id = co.country_id
+    WHERE co.country IN (
+      SELECT  co.country
+      FROM customer c
+      INNER JOIN address a ON c.address_id = a.address_id
+      INNER JOIN city ci ON a.city_id = ci.city_id
+      INNER JOIN country co ON ci.country_id = co.country_id
+      GROUP BY co.country
+      ORDER BY COUNT(c.customer_id) DESC
+      LIMIT 10
+    )
+    GROUP BY ci.city
+    ORDER BY COUNT(c.customer_id) DESC
+    LIMIT 10
+  )
+  GROUP BY c.customer_id, c.first_name, c.last_name, co.country, ci.city
+  ORDER BY total_amount DESC
+  LIMIT 5
+) AS total_amount_paid;
+
+## Find out how many of the top 5 customers you identified in step 1 are based within each country.
+SELECT co.country, COUNT (DISTINCT c.customer_id) AS all_customer_count, COUNT (DISTINCT top_5.customer_id) AS top_customer_count
+FROM customer c
+INNER JOIN address a ON c.address_id = a.address_id
+INNER JOIN city ci ON a.city_id = ci.city_id
+INNER JOIN country co ON ci.country_id = co.country_id
+LEFT JOIN (
+  SELECT  c.customer_id,  
+          c.first_name,
+          c.last_name, 
+          co.country, 
+          ci.city, 
+          SUM(p.amount) AS total_amount
+  FROM customer c
+  INNER JOIN payment p ON c.customer_id = p.customer_id
+  INNER JOIN address a ON c.address_id = a.address_id
+  INNER JOIN city ci ON a.city_id = ci.city_id
+  INNER JOIN country co ON ci.country_id = co.country_id
+  WHERE ci.city IN (
+    SELECT  ci.city
+    FROM customer c
+    INNER JOIN address a ON c.address_id = a.address_id
+    INNER JOIN city ci ON a.city_id = ci.city_id
+    INNER JOIN country co ON ci.country_id = co.country_id
+    WHERE co.country IN (
+      SELECT  co.country
+      FROM customer c
+      INNER JOIN address a ON c.address_id = a.address_id
+      INNER JOIN city ci ON a.city_id = ci.city_id
+      INNER JOIN country co ON ci.country_id = co.country_id
+      GROUP BY co.country
+      ORDER BY COUNT(c.customer_id) DESC
+      LIMIT 10
+    )
+    GROUP BY ci.city
+    ORDER BY COUNT(c.customer_id) DESC
+    LIMIT 10
+  )
+  GROUP BY c.customer_id, c.first_name, c.last_name, co.country, ci.city
+  ORDER BY total_amount DESC
+  LIMIT 5
+) AS top_5 ON co.country= top_5.country
+GROUP BY co.country;
+
+# convert subqueries from the last step into CTEs to make  code easier to read
+WITH top_5 AS
+		(SELECT  c.customer_id,  
+		          c.first_name,
+		          c.last_name, 
+		          co.country, 
+		          ci.city, 
+		          SUM(p.amount) AS total_amount
+		  FROM customer c
+		  INNER JOIN payment p ON c.customer_id = p.customer_id
+		  INNER JOIN address a ON c.address_id = a.address_id
+		  INNER JOIN city ci ON a.city_id = ci.city_id
+		  INNER JOIN country co ON ci.country_id = co.country_id
+		  WHERE ci.city IN (
+		    SELECT  ci.city
+		    FROM customer c
+		    INNER JOIN address a ON c.address_id = a.address_id
+		    INNER JOIN city ci ON a.city_id = ci.city_id
+		    INNER JOIN country co ON ci.country_id = co.country_id
+		    WHERE co.country IN (
+		      SELECT  co.country
+		      FROM customer c
+		      INNER JOIN address a ON c.address_id = a.address_id
+		      INNER JOIN city ci ON a.city_id = ci.city_id
+		      INNER JOIN country co ON ci.country_id = co.country_id
+		      GROUP BY co.country
+		      ORDER BY COUNT(c.customer_id) DESC
+		      LIMIT 10
+		    )
+		    GROUP BY ci.city
+		    ORDER BY COUNT(c.customer_id) DESC
+		    LIMIT 10
+			)
+		GROUP BY c.customer_id, c.first_name, c.last_name, co.country, ci.city
+	  	ORDER BY total_amount DESC
+	 	LIMIT 5
+		)
+			
+	SELECT AVG(total_amount) AS average
+	FROM top_5;
+
+WITH top_5 AS
+		( SELECT  c.customer_id,  
+		          c.first_name,
+		          c.last_name, 
+		          co.country, 
+		          ci.city, 
+		          SUM(p.amount) AS total_amount
+		  FROM customer c
+		  INNER JOIN payment p ON c.customer_id = p.customer_id
+		  INNER JOIN address a ON c.address_id = a.address_id
+		  INNER JOIN city ci ON a.city_id = ci.city_id
+		  INNER JOIN country co ON ci.country_id = co.country_id
+		  WHERE ci.city IN (
+		    SELECT  ci.city
+		    FROM customer c
+		    INNER JOIN address a ON c.address_id = a.address_id
+		    INNER JOIN city ci ON a.city_id = ci.city_id
+		    INNER JOIN country co ON ci.country_id = co.country_id
+		    WHERE co.country IN (
+		      SELECT  co.country
+		      FROM customer c
+		      INNER JOIN address a ON c.address_id = a.address_id
+		      INNER JOIN city ci ON a.city_id = ci.city_id
+		      INNER JOIN country co ON ci.country_id = co.country_id
+		      GROUP BY co.country
+		      ORDER BY COUNT(c.customer_id) DESC
+		      LIMIT 10
+		    )
+		    GROUP BY ci.city
+		    ORDER BY COUNT(c.customer_id) DESC
+		    LIMIT 10
+		  )
+		  GROUP BY c.customer_id, c.first_name, c.last_name, co.country, ci.city
+		  ORDER BY total_amount DESC
+		  LIMIT 5
+		) 
+	
+SELECT  co.country, COUNT (DISTINCT c.customer_id) AS all_customer_count, COUNT (DISTINCT top_5.customer_id) AS top_customer_count
+		FROM customer c
+		INNER JOIN address a ON c.address_id = a.address_id
+		INNER JOIN city ci ON a.city_id = ci.city_id
+		INNER JOIN country co ON ci.country_id = co.country_id
+		LEFT JOIN top_5 ON co.country= top_5.country
+		GROUP BY co.country
+
+
